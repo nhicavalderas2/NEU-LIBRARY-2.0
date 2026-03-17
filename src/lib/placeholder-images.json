@@ -1,0 +1,10 @@
+{
+  "placeholderImages": [
+    {
+      "id": "neu-logo",
+      "description": "New Era University Logo",
+      "imageUrl": "https://neu.edu.ph/main/img/neu.png",
+      "imageHint": "university logo"
+    }
+  ]
+}

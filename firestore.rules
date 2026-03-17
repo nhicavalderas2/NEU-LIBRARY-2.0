@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * NEU Library Visitor Management System - Security Rules
+     */
+
+    // --- Helper Functions ---
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "nhica.valderas@neu.edu.ph" || 
+        request.auth.token.email == "shawndavid.domingo@neu.edu.ph" ||
+        request.auth.token.email == "jcesperanza@neu.edu.ph"
+      );
+    }
+
+    /** Checks if a specific visitor is in the block list. */
+    function isVisitorBlocked(visitorId) {
+      return exists(/databases/$(database)/documents/blockList/$(visitorId));
+    }
+
+    // --- Collection Rules ---
+
+    match /adminRoles/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /visitors/{visitorId} {
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /visitor_logs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isSignedIn() && !isVisitorBlocked(request.resource.data.visitorId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /blockList/{visitorId} {
+      allow read: if isSignedIn(); // Allow visitors to check if they are blocked
+      allow write: if isAdmin();
+    }
+  }
+}

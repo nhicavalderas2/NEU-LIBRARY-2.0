@@ -1,0 +1,69 @@
+
+{
+  "entities": {
+    "Visitor": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Visitor",
+      "type": "object",
+      "description": "Represents a library visitor.",
+      "properties": {
+        "id": { "type": "string" },
+        "schoolId": { "type": "string" },
+        "institutionalEmail": { "type": "string", "format": "email" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "college": { "type": "string" },
+        "isBlocked": { "type": "boolean" }
+      },
+      "required": ["firstName", "lastName", "college"]
+    },
+    "VisitorLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VisitorLog",
+      "type": "object",
+      "description": "A record of a library visit.",
+      "properties": {
+        "id": { "type": "string" },
+        "visitorId": { "type": "string" },
+        "visitorFirstName": { "type": "string" },
+        "visitorLastName": { "type": "string" },
+        "visitorCollege": { "type": "string" },
+        "visitorInstitutionalEmail": { "type": "string", "format": "email" },
+        "timeIn": { "type": "string", "format": "date-time" },
+        "purposeOfVisit": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "COMPLETED"] }
+      },
+      "required": ["visitorId", "timeIn", "purposeOfVisit", "status"]
+    },
+    "BlockListEntry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BlockListEntry",
+      "type": "object",
+      "description": "A visitor who is blocked from entry.",
+      "properties": {
+        "id": { "type": "string" },
+        "visitorName": { "type": "string" },
+        "reason": { "type": "string" },
+        "blockedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["blockedAt"]
+    }
+  },
+  "auth": {
+    "providers": ["password", "anonymous", "google.com"]
+  },
+  "firestore": {
+    "/visitors/{visitorId}": {
+      "schema": { "$ref": "#/backend/entities/Visitor" },
+      "description": "Stores individual visitor details."
+    },
+    "/visitor_logs/{logId}": {
+      "schema": { "$ref": "#/backend/entities/VisitorLog" },
+      "description": "Records each check-in event."
+    },
+    "/blockList/{visitorId}": {
+      "schema": { "$ref": "#/backend/entities/BlockListEntry" },
+      "description": "Stores blocked visitors."
+    }
+  }
+}

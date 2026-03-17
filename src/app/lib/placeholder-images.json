@@ -1,0 +1,23 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "neu-logo",
+      "description": "New Era University Logo",
+      "imageUrl": "https://neu.edu.ph/main/img/neu.png",
+      "imageHint": "university logo"
+    },
+    {
+      "id": "library-hero",
+      "description": "A modern university library interior",
+      "imageUrl": "https://picsum.photos/seed/neu-lib/1200/800",
+      "imageHint": "university library"
+    },
+    {
+      "id": "visitor-avatar-1",
+      "description": "Student visitor avatar",
+      "imageUrl": "https://picsum.photos/seed/student1/100/100",
+      "imageHint": "student person"
+    }
+  ]
+}
