@@ -43,37 +43,33 @@ export default function LandingPage() {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="w-full max-w-2xl bg-[#1a3a2a] rounded-xl shadow-2xl p-12 text-center text-white space-y-8">
           <div className="space-y-4">
-            <h2 className="text-4xl font-bold tracking-tight">
+            <h2 className="text-4xl font-bold tracking-tight uppercase">
               Welcome to the NEU Library
             </h2>
-            <p className="text-emerald-100 text-lg opacity-80">
+            <p className="text-emerald-100 text-lg opacity-80 uppercase text-xs font-bold tracking-widest">
               Your gateway to knowledge and resources. Please sign in to continue.
             </p>
           </div>
 
           <div className="grid gap-4 max-w-sm mx-auto">
             <Link href="/visitor" className="w-full">
-              <Button variant="outline" className="w-full h-14 text-lg font-medium border-white/20 hover:bg-white/10 text-white bg-transparent transition-all">
-                Visitor Check-in &rarr;
+              <Button variant="outline" className="w-full h-14 text-lg font-bold border-white/20 hover:bg-white/10 text-white bg-transparent transition-all uppercase tracking-widest">
+                USER LOG IN &rarr;
               </Button>
             </Link>
             
             <Link href="/admin/login" className="w-full">
-              <Button variant="outline" className="w-full h-14 text-lg font-medium border-white/20 hover:bg-white/10 text-white bg-transparent transition-all">
-                Admin Portal
+              <Button variant="outline" className="w-full h-14 text-lg font-bold border-white/20 hover:bg-white/10 text-white bg-transparent transition-all uppercase tracking-widest">
+                ADMIN PORTAL
               </Button>
             </Link>
-
-            <Button variant="outline" className="w-full h-14 text-lg font-medium border-white/20 hover:bg-white/10 text-white bg-transparent transition-all">
-              Tap ID or Scan QR
-            </Button>
           </div>
         </div>
       </div>
 
-      <div className="p-4 text-center opacity-60 text-white text-xs uppercase tracking-widest font-semibold">
-        LibFlow NEU • Secure Visitor Management
-      </div>
+      <footer className="w-full text-center py-8 text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">
+        © 2026 NEU Library. All rights reserved
+      </footer>
     </main>
   );
 }

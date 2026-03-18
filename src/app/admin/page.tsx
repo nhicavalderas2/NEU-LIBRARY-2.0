@@ -1,50 +1,60 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { useMemoFirebase, useCollection, useFirestore, useUser, useAuth } from "@/firebase";
-import { collection, query, orderBy, limit, Timestamp } from "firebase/firestore";
+import { collection, query, orderBy, limit, Timestamp, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import { 
   Users, 
-  Calendar, 
+  Calendar as CalendarIcon, 
   UserX, 
   Activity, 
   FileDown, 
   Search,
   Library,
-  Info,
   LogOut,
   ShieldAlert,
-  ChevronLeft,
-  Loader2
+  Loader2,
+  Ban,
+  Filter,
+  Users2,
+  GraduationCap,
+  ChevronRight
 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import Link from "next/link";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import { PlaceHolderImages } from "@/lib/placeholder-images";
+import { useToast } from "@/hooks/use-toast";
+import { format, subDays, startOfDay, endOfDay, isWithinInterval } from "date-fns";
 
 const ADMIN_WHITELIST = [
   "nhica.valderas@neu.edu.ph",
   "shawndavid.domingo@neu.edu.ph",
-  "jcesperanza@neu.edu.ph"
+  "jcesperanza@neu.edu.ph",
+  "edwardjasteen.degala@neu.edu.ph"
 ];
 
-function FormattedTime({ dateString }: { dateString: any }) {
+const COLLEGES = ["All Colleges", "College of Engineering", "College of Arts and Sciences", "College of Business Administration", "College of Computer Studies", "College of Nursing", "College of Law", "College of Medicine", "Staff / Administration"];
+const PURPOSES = ["All Purposes", "Reading", "Research", "Computer Use", "Assignments"];
+const USER_TYPES = ["All Types", "Student", "Employee"];
+
+function FormattedDateDisplay({ dateString }: { dateString: any }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   
-  if (!mounted) return <span className="opacity-0">00:00 am</span>;
+  if (!mounted) return <span className="opacity-0">--/--/--</span>;
   
   try {
     let date: Date;
@@ -56,12 +66,12 @@ function FormattedTime({ dateString }: { dateString: any }) {
       date = new Date(dateString);
     }
     return (
-      <span className="text-sm">
-        {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase()}
+      <span className="text-sm font-medium">
+        {format(date, "MMM dd, yyyy")}
       </span>
     );
   } catch (e) {
-    return <span className="text-sm text-muted-foreground">--:--</span>;
+    return <span className="text-sm text-muted-foreground">--/--/--</span>;
   }
 }
 
@@ -70,8 +80,19 @@ export default function AdminDashboard() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
   const router = useRouter();
+  const { toast } = useToast();
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  
+  // Advanced Filters
+  const [filterCollege, setFilterCollege] = useState("All Colleges");
+  const [filterPurpose, setFilterPurpose] = useState("All Purposes");
+  const [filterUserType, setFilterUserType] = useState("All Types");
+  const [dateRangeMode, setDateRangeMode] = useState("today"); 
+  const [customRange, setCustomRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: undefined,
+    to: undefined,
+  });
 
   const neuLogo = PlaceHolderImages.find(img => img.id === 'neu-logo')?.imageUrl || "";
 
@@ -82,9 +103,9 @@ export default function AdminDashboard() {
   // Real-time visitor logs
   const logsQuery = useMemoFirebase(() => {
     if (!firestore || !isAdmin) return null;
-    return query(collection(firestore, "visitor_logs"), orderBy("timeIn", "desc"), limit(100));
+    return query(collection(firestore, "visitor_logs"), orderBy("timestamp", "desc"), limit(1000));
   }, [firestore, isAdmin]);
-  const { data: logs, isLoading: logsLoading } = useCollection(logsQuery);
+  const { data: rawLogs, isLoading: logsLoading } = useCollection(logsQuery);
 
   // Real-time block list
   const blockListQuery = useMemoFirebase(() => {
@@ -93,7 +114,83 @@ export default function AdminDashboard() {
   }, [firestore, isAdmin]);
   const { data: blockList } = useCollection(blockListQuery);
 
-  const blockedIds = useMemo(() => new Set(blockList?.map(item => item.id) || []), [blockList]);
+  const filteredLogs = useMemo(() => {
+    if (!rawLogs) return [];
+    
+    let filtered = [...rawLogs];
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const weekStart = startOfDay(subDays(now, 7));
+    const monthStart = startOfDay(subDays(now, 30));
+    const yearStart = startOfDay(subDays(now, 365));
+
+    // Apply Date Filter
+    if (dateRangeMode === "today") {
+      filtered = filtered.filter(log => {
+        const d = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
+        return d >= todayStart;
+      });
+    } else if (dateRangeMode === "week") {
+      filtered = filtered.filter(log => {
+        const d = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
+        return d >= weekStart;
+      });
+    } else if (dateRangeMode === "month") {
+      filtered = filtered.filter(log => {
+        const d = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
+        return d >= monthStart;
+      });
+    } else if (dateRangeMode === "year") {
+      filtered = filtered.filter(log => {
+        const d = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
+        return d >= yearStart;
+      });
+    } else if (dateRangeMode === "custom" && customRange.from && customRange.to) {
+      filtered = filtered.filter(log => {
+        const d = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
+        return isWithinInterval(d, {
+          start: startOfDay(customRange.from!),
+          end: endOfDay(customRange.to!),
+        });
+      });
+    }
+
+    // Apply Content Filters
+    if (filterCollege !== "All Colleges") {
+      filtered = filtered.filter(l => l.college === filterCollege);
+    }
+    if (filterPurpose !== "All Purposes") {
+      filtered = filtered.filter(l => l.purpose === filterPurpose);
+    }
+    if (filterUserType !== "All Types") {
+      filtered = filtered.filter(l => l.userType === filterUserType);
+    }
+
+    // Apply Search
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(log => 
+        (log.fullName || "").toLowerCase().includes(term) ||
+        (log.visitorId || "").toLowerCase().includes(term)
+      );
+    }
+
+    return filtered;
+  }, [rawLogs, searchTerm, filterCollege, filterPurpose, filterUserType, dateRangeMode, customRange]);
+
+  const stats = useMemo(() => {
+    const totalCount = filteredLogs.length;
+    const activeSessions = filteredLogs.filter(l => l.status === 'ACTIVE').length;
+    const studentCount = filteredLogs.filter(l => l.userType === 'Student').length;
+    const employeeCount = filteredLogs.filter(l => l.userType === 'Employee').length;
+
+    return [
+      { title: "Today's Visitors", value: totalCount.toString(), icon: Users, color: "text-emerald-600", bg: "bg-emerald-50" },
+      { title: "Active Sessions", value: activeSessions.toString(), icon: Activity, color: "text-orange-600", bg: "bg-orange-50" },
+      { title: "Students", value: studentCount.toString(), icon: GraduationCap, color: "text-blue-600", bg: "bg-blue-50" },
+      { title: "Employees", value: employeeCount.toString(), icon: Users2, color: "text-purple-600", bg: "bg-purple-50" },
+    ];
+  }, [filteredLogs]);
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -101,201 +198,114 @@ export default function AdminDashboard() {
     router.push("/admin/login");
   };
 
-  // PDF Generation Logic
-  const generatePDF = () => {
-    if (!logs || logs.length === 0) return;
-    setIsGeneratingPDF(true);
+  const handleBlock = async (log: any) => {
+    if (!firestore || !log.visitorId) return;
+    const isBlocked = blockList?.some(b => b.id === log.visitorId);
+    try {
+      if (isBlocked) {
+        await deleteDoc(doc(firestore, "blockList", log.visitorId));
+        toast({ title: "Visitor Unblocked", description: `${log.fullName} has been removed.` });
+      } else {
+        await setDoc(doc(firestore, "blockList", log.visitorId), {
+          visitorName: log.fullName,
+          email: log.email || "N/A",
+          blockedAt: Timestamp.now(),
+          reason: "Administrative Action"
+        });
+        toast({ variant: "destructive", title: "Visitor Blocked", description: `${log.fullName} has been blocked.` });
+      }
+    } catch (error) {
+      toast({ variant: "destructive", title: "Action Failed" });
+    }
+  };
 
+  const generatePDF = () => {
+    if (!filteredLogs.length) return;
+    setIsGeneratingPDF(true);
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
-
-      // Header Branding
-      doc.setFillColor(31, 58, 58); // NEU Blue-Green
+      doc.setFillColor(26, 58, 42); 
       doc.rect(0, 0, pageWidth, 40, 'F');
-      
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(22);
       doc.text("NEU LIBRARY VISITOR REPORT", pageWidth / 2, 20, { align: 'center' });
-      
       doc.setFontSize(10);
-      doc.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, 30, { align: 'center' });
-
-      // Summary Stats Section
-      doc.setTextColor(33, 33, 33);
-      doc.setFontSize(14);
-      doc.text("Summary Statistics", 14, 55);
       
-      doc.setFontSize(10);
-      doc.text(`Total Records in Report: ${logs.length}`, 14, 65);
-      doc.text(`Report Period: Today`, 14, 70);
-
-      // Logs Table
-      const tableData = logs.map(log => {
-        let logDate: Date;
-        if (log.timeIn instanceof Timestamp) logDate = log.timeIn.toDate();
-        else if (log.timeIn?.toDate) logDate = log.timeIn.toDate();
-        else logDate = new Date(log.timeIn);
-
-        return [
-          logDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          `${log.visitorFirstName} ${log.visitorLastName}`,
-          log.visitorCollege || 'N/A',
-          log.purposeOfVisit || 'N/A',
-          blockedIds.has(log.visitorId) ? 'BLOCKED' : 'ACTIVE'
-        ];
-      });
-
+      let dateText = dateRangeMode.toUpperCase();
+      if (dateRangeMode === 'custom' && customRange.from && customRange.to) {
+        dateText = `${format(customRange.from, "PP")} - ${format(customRange.to, "PP")}`;
+      }
+      
+      doc.text(`Period: ${dateText} | Filter: ${filterCollege} | Generated: ${new Date().toLocaleString()}`, pageWidth / 2, 30, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(12);
+      doc.text(`Filtered Records: ${filteredLogs.length}`, 14, 50);
+      const tableData = filteredLogs.map(log => [
+        format(log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp), "MMM dd, yyyy"),
+        log.fullName || 'Unknown',
+        log.userType || 'Student',
+        log.college || 'N/A',
+        log.purpose || 'N/A'
+      ]);
       (doc as any).autoTable({
-        startY: 80,
-        head: [['Time In', 'Name', 'College', 'Purpose', 'Status']],
+        startY: 65,
+        head: [['Date', 'Name', 'Role', 'College', 'Purpose']],
         body: tableData,
-        headStyles: { fillColor: [31, 58, 58] },
-        alternateRowStyles: { fillColor: [240, 244, 247] },
+        headStyles: { fillColor: [26, 58, 42] },
+        alternateRowStyles: { fillColor: [245, 250, 245] },
       });
-
       doc.save(`NEU_Library_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-    } catch (error) {
-      console.error("PDF generation failed:", error);
     } finally {
       setIsGeneratingPDF(false);
     }
   };
 
-  // Statistics Calculation
-  const stats = useMemo(() => {
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-
-    const todayCount = logs?.filter(log => {
-      let logDate: Date;
-      if (log.timeIn instanceof Timestamp) {
-        logDate = log.timeIn.toDate();
-      } else if (log.timeIn?.toDate) {
-        logDate = log.timeIn.toDate();
-      } else {
-        logDate = new Date(log.timeIn);
-      }
-      return logDate >= todayStart;
-    }).length || 0;
-
-    const activeSessions = logs?.filter(l => l.status === 'ACTIVE').length || 0;
-    const blockedCount = blockList?.length || 0;
-
-    return [
-      { title: "Today's Visitors", value: todayCount.toString(), icon: Users, color: "text-blue-600" },
-      { title: "Recent Records", value: logs?.length.toString() || "0", icon: Calendar, color: "text-green-600" },
-      { title: "Blocked Users", value: blockedCount.toString(), icon: UserX, color: "text-red-600" },
-      { title: "Active Sessions", value: activeSessions.toString(), icon: Activity, color: "text-emerald-600" },
-    ];
-  }, [logs, blockList]);
-
-  // Search filter
-  const filteredLogs = useMemo(() => {
-    if (!logs) return [];
-    if (!searchTerm) return logs;
-    const term = searchTerm.toLowerCase();
-    return logs.filter(log => 
-      `${log.visitorFirstName} ${log.visitorLastName}`.toLowerCase().includes(term) ||
-      (log.visitorCollege || "").toLowerCase().includes(term) ||
-      (log.purposeOfVisit || "").toLowerCase().includes(term)
-    );
-  }, [logs, searchTerm]);
-
-  if (isUserLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="flex flex-col items-center space-y-4">
-          <Activity className="h-10 w-10 text-primary animate-spin" />
-          <p className="text-sm font-medium text-muted-foreground tracking-widest uppercase">Verifying Admin Access...</p>
-        </div>
-      </div>
-    );
-  }
+  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
 
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-red-50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md text-center border-red-200 shadow-xl bg-white">
-          <CardHeader className="space-y-4 pt-10">
-            <div className="mx-auto bg-red-100 p-4 rounded-full w-fit">
-              <ShieldAlert className="h-12 w-12 text-red-600" />
-            </div>
-            <CardTitle className="text-2xl font-bold text-red-900">Access Denied</CardTitle>
-            <CardDescription className="text-red-700">
-              Your account <strong>{user?.email || "Unknown"}</strong> does not have administrative privileges.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pb-10 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Please contact the Library System Administrator if you believe this is an error.
-            </p>
-            <div className="flex flex-col space-y-3">
-              <Button onClick={handleLogout} variant="outline" className="border-red-200 text-red-700 hover:bg-red-50">
-                Log Out
-              </Button>
-              <Link href="/" className="w-full">
-                <Button className="w-full bg-[#1a3a3a] hover:bg-[#1a3a3a]/90">
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Return to Home
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center border-none shadow-2xl bg-white p-8">
+          <ShieldAlert className="h-12 w-12 text-red-600 mx-auto mb-6" />
+          <CardTitle className="text-2xl font-bold mb-2 uppercase">Access Denied</CardTitle>
+          <Button onClick={handleLogout} variant="outline" className="w-full mt-8 uppercase">Sign Out</Button>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-[#1a3a3a] text-white shadow-md">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            {neuLogo ? (
-              <Image 
-                src={neuLogo} 
-                alt="NEU Logo" 
-                width={36} 
-                height={36} 
-                className="object-contain"
-              />
-            ) : (
-              <Library className="h-7 w-7" />
-            )}
-            <div className="flex flex-col">
-              <h1 className="text-xl font-bold leading-none uppercase">NEU Library</h1>
-              <span className="text-xs opacity-70">Visitor Log • Admin Panel</span>
-            </div>
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col">
+      <header className="bg-[#1a3a2a] text-white shadow-lg sticky top-0 z-10">
+        <div className="container mx-auto px-6 h-20 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            {neuLogo ? <Image src={neuLogo} alt="NEU" width={44} height={44} className="bg-white rounded-full p-1" /> : <Library className="h-8 w-8" />}
+            <h1 className="text-xl font-bold uppercase tracking-tight hidden sm:block">NEU Library Dashboard</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="hidden md:flex flex-col items-end text-right mr-2">
-              <span className="text-xs font-bold opacity-80">{user.displayName || "Staff"}</span>
-              <span className="text-[10px] opacity-60">{user.email}</span>
+            <div className="text-right mr-4 hidden md:block">
+              <p className="text-sm font-bold uppercase">{user.displayName}</p>
+              <p className="text-[10px] opacity-70">{user.email}</p>
             </div>
-            <Button 
-              onClick={handleLogout}
-              variant="outline" 
-              size="sm" 
-              className="text-white border-white/20 hover:bg-white/10"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Log Out
+            <Button onClick={handleLogout} variant="outline" size="sm" className="bg-white/10 border-white/20 text-white uppercase font-bold text-xs">
+              <LogOut className="h-4 w-4 mr-2" /> Log Out
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto p-6 space-y-6">
+      <main className="container mx-auto p-6 md:p-8 space-y-8 flex-1">
+        {/* Statistics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {stats.map((stat, i) => (
-            <Card key={i} className="border-none shadow-sm overflow-hidden bg-white">
+            <Card key={i} className="border-none shadow-sm bg-white overflow-hidden">
               <CardContent className="p-6 flex items-center justify-between">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{stat.title}</p>
-                  <h3 className="text-3xl font-bold">{stat.value}</h3>
+                <div>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1">{stat.title}</p>
+                  <h3 className="text-3xl font-black text-slate-900">{stat.value}</h3>
                 </div>
-                <div className={cn("p-2 rounded-lg bg-slate-100", stat.color)}>
+                <div className={cn("p-4 rounded-2xl", stat.bg, stat.color)}>
                   <stat.icon className="h-6 w-6" />
                 </div>
               </CardContent>
@@ -303,139 +313,209 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="border-none shadow-sm bg-white">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg font-bold">Visitor Statistics & Reporting</CardTitle>
-                <CardDescription>Time Period Selector</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-center justify-between gap-4 border-b pb-6">
-                <RadioGroup defaultValue="day" className="flex space-x-6">
-                  {['Day', 'Week', 'Month', 'Custom'].map(period => (
-                    <div key={period} className="flex items-center space-x-2">
-                      <RadioGroupItem value={period.toLowerCase()} id={period} />
-                      <Label htmlFor={period} className="text-sm font-medium">{period}</Label>
-                    </div>
-                  ))}
-                </RadioGroup>
-                <Button 
-                  onClick={generatePDF}
-                  disabled={isGeneratingPDF || !logs || logs.length === 0}
-                  className="bg-[#1a3a3a] hover:bg-[#1a3a3a]/90"
-                >
-                  {isGeneratingPDF ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <FileDown className="h-4 w-4 mr-2" />
+        {/* Filter Card */}
+        <Card className="border-none shadow-sm bg-white">
+          <CardHeader className="border-b pb-4">
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500 flex items-center">
+              <Filter className="h-4 w-4 mr-2" />
+              Advanced Data Filters
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="space-y-2">
+                <Label className="uppercase text-[10px] font-bold tracking-wider">Time Period</Label>
+                <div className="flex gap-2">
+                  <Select value={dateRangeMode} onValueChange={setDateRangeMode}>
+                    <SelectTrigger className="flex-1 font-bold text-xs uppercase">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today" className="uppercase text-xs font-bold">Day (Today)</SelectItem>
+                      <SelectItem value="week" className="uppercase text-xs font-bold">Week (7 Days)</SelectItem>
+                      <SelectItem value="month" className="uppercase text-xs font-bold">Month (30 Days)</SelectItem>
+                      <SelectItem value="year" className="uppercase text-xs font-bold">Year (365 Days)</SelectItem>
+                      <SelectItem value="custom" className="uppercase text-xs font-bold">Chosen Range</SelectItem>
+                      <SelectItem value="all" className="uppercase text-xs font-bold">All Time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {dateRangeMode === 'custom' && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon" className="shrink-0 h-10 w-10">
+                          <CalendarIcon className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                          initialFocus
+                          mode="range"
+                          defaultMonth={customRange.from}
+                          selected={{ from: customRange.from, to: customRange.to }}
+                          onSelect={(range) => setCustomRange({ from: range?.from, to: range?.to })}
+                          numberOfMonths={2}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   )}
-                  Generate PDF Report
-                </Button>
-              </CardContent>
-              <CardHeader className="pt-6">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg font-bold">Visitor Activity Logs</CardTitle>
-                  <div className="relative w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      placeholder="Search users here" 
-                      className="pl-10 h-9" 
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader className="bg-slate-50">
-                    <TableRow>
-                      <TableHead className="font-bold">Time In</TableHead>
-                      <TableHead className="font-bold">Name</TableHead>
-                      <TableHead className="font-bold">College/Office</TableHead>
-                      <TableHead className="font-bold">Purpose</TableHead>
-                      <TableHead className="font-bold text-center">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {logsLoading ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8">Loading logs...</TableCell></TableRow>
-                    ) : filteredLogs.length === 0 ? (
-                      <TableRow><TableCell colSpan={5} className="text-center py-8">No activity logs found.</TableCell></TableRow>
-                    ) : filteredLogs.map((log: any) => {
-                      const isBlocked = blockedIds.has(log.visitorId);
-                      return (
-                        <TableRow key={log.id}>
-                          <TableCell>
-                            <FormattedTime dateString={log.timeIn} />
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            {log.visitorFirstName} {log.visitorLastName}
-                          </TableCell>
-                          <TableCell className="text-sm">{log.visitorCollege}</TableCell>
-                          <TableCell className="text-sm">{log.purposeOfVisit}</TableCell>
-                          <TableCell className="text-center">
-                            <Badge className={cn(
-                              "w-20 justify-center border-none shadow-none",
-                              isBlocked 
-                                ? "bg-red-100 text-red-700" 
-                                : "bg-green-100 text-green-700"
-                            )}>
-                              {isBlocked ? "BLOCKED" : "ACTIVE"}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="uppercase text-[10px] font-bold tracking-wider">User Type</Label>
+                <Select value={filterUserType} onValueChange={setFilterUserType}>
+                  <SelectTrigger className="font-bold text-xs uppercase"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {USER_TYPES.map(t => <SelectItem key={t} value={t} className="uppercase text-xs font-bold">{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="uppercase text-[10px] font-bold tracking-wider">College / Department</Label>
+                <Select value={filterCollege} onValueChange={setFilterCollege}>
+                  <SelectTrigger className="font-bold text-xs uppercase"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {COLLEGES.map(c => <SelectItem key={c} value={c} className="uppercase text-xs font-bold">{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="uppercase text-[10px] font-bold tracking-wider">Purpose of Visit</Label>
+                <Select value={filterPurpose} onValueChange={setFilterPurpose}>
+                  <SelectTrigger className="font-bold text-xs uppercase"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PURPOSES.map(p => <SelectItem key={p} value={p} className="uppercase text-xs font-bold">{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-          <div className="space-y-6">
-            <Card className="border-none shadow-sm bg-white">
-              <CardHeader className="bg-slate-50 border-b">
-                <CardTitle className="text-md font-bold">Block List Management</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead className="text-right">Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {blockList?.length === 0 ? (
-                      <TableRow><TableCell colSpan={2} className="text-center py-4 text-xs text-muted-foreground">No blocked users</TableCell></TableRow>
-                    ) : blockList?.map((block: any) => (
-                      <TableRow key={block.id}>
-                        <TableCell className="text-sm font-medium">{block.visitorName || 'Unknown Visitor'}</TableCell>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          <Card className="xl:col-span-2 border-none shadow-sm bg-white">
+            <CardHeader className="flex flex-row items-center justify-between p-6 border-b">
+              <CardTitle className="text-lg font-bold flex items-center uppercase">
+                <Activity className="h-5 w-5 mr-2 text-emerald-600" />
+                Live Visitor Activity
+              </CardTitle>
+              <div className="flex items-center space-x-3">
+                <div className="relative hidden sm:block">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input placeholder="Search name/ID..." className="pl-10 h-10 font-bold uppercase text-[10px] tracking-widest" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                </div>
+                <Button onClick={generatePDF} disabled={isGeneratingPDF || !filteredLogs.length} className="bg-[#1a3a2a] uppercase text-xs font-bold">
+                  <FileDown className="h-4 w-4 mr-2" /> Export PDF
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="uppercase text-[10px] font-bold">Date</TableHead>
+                    <TableHead className="uppercase text-[10px] font-bold">Visitor</TableHead>
+                    <TableHead className="uppercase text-[10px] font-bold">Role</TableHead>
+                    <TableHead className="uppercase text-[10px] font-bold">College</TableHead>
+                    <TableHead className="text-right uppercase text-[10px] font-bold">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logsLoading ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-20"><Loader2 className="h-8 w-8 animate-spin mx-auto text-emerald-600" /></TableCell></TableRow>
+                  ) : filteredLogs.length === 0 ? (
+                    <TableRow><TableCell colSpan={5} className="text-center py-20 text-slate-400 font-bold uppercase text-xs">No records found for active filters</TableCell></TableRow>
+                  ) : filteredLogs.map((log: any) => {
+                    const isVisitorBlocked = blockList?.some(b => b.id === log.visitorId);
+                    return (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-slate-500"><FormattedDateDisplay dateString={log.timestamp} /></TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-900 uppercase text-xs">{log.fullName}</span>
+                            <span className="text-[10px] text-slate-400 uppercase tracking-tighter">{log.visitorId}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" className="text-[10px] font-bold uppercase">
+                            {log.userType || "Student"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 truncate max-w-[150px] font-medium">{log.college || "N/A"}</TableCell>
                         <TableCell className="text-right">
-                          <Badge variant="outline" className="bg-red-50 text-red-600 border-red-100 text-[10px] shadow-none">BLOCKED</Badge>
+                          <Button 
+                            onClick={() => handleBlock(log)}
+                            variant={isVisitorBlocked ? "default" : "outline"}
+                            size="sm"
+                            className={cn("h-8 text-[10px] uppercase font-bold", isVisitorBlocked ? "bg-red-600" : "text-red-600 border-red-100")}
+                          >
+                            {isVisitorBlocked ? "Unblock" : "Block"}
+                          </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-8">
+            <Card className="border-none shadow-sm bg-white">
+              <CardHeader className="bg-slate-50 border-b p-6">
+                <CardTitle className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center">
+                  <UserX className="h-4 w-4 mr-2" /> Restricted Access List
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 max-h-[300px] overflow-auto">
+                {!blockList?.length ? (
+                  <div className="p-8 text-center text-xs text-slate-400 italic uppercase font-bold">No restrictions in place</div>
+                ) : (
+                  <Table>
+                    <TableBody>
+                      {blockList.map((block: any) => (
+                        <TableRow key={block.id}>
+                          <TableCell className="py-4">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-bold uppercase">{block.visitorName}</span>
+                              <span className="text-[10px] text-slate-400 uppercase tracking-widest">{block.id}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right py-4">
+                            <Badge className="bg-red-50 text-red-600 border-red-100 uppercase font-black">BLOCKED</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
 
-            <Card className="border-none shadow-sm bg-white">
-              <CardContent className="p-6 space-y-4">
-                <div className="flex items-center text-red-600 font-bold text-sm">
-                  <Info className="h-4 w-4 mr-2" />
-                  Access Warning
+            <Card className="border-none shadow-sm bg-[#1a3a2a] text-white">
+              <CardContent className="p-8 space-y-6 text-center">
+                <div className="flex justify-center mb-4">
+                  <div className="bg-white/10 p-4 rounded-full">
+                    <Library className="h-10 w-10 text-emerald-400" />
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  System access is limited to authorized library staff. Any unauthorized attempts to bypass security will be logged and reported to the system administrator.
+                <h4 className="font-bold text-lg uppercase tracking-tight">Security & Insights</h4>
+                <p className="text-[10px] text-emerald-50 leading-relaxed uppercase opacity-80 font-bold">
+                  Toggle filters to generate custom reports for library management and safety audits.
                 </p>
+                <div className="pt-4 flex items-center justify-center text-[10px] font-black uppercase text-emerald-400 tracking-widest">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse mr-2" />
+                  Real-time Data Stream: ACTIVE
+                </div>
               </CardContent>
             </Card>
           </div>
         </div>
       </main>
+
+      <footer className="w-full text-center py-6 text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] border-t bg-white">
+        © 2026 NEU Library. All rights reserved
+      </footer>
     </div>
   );
 }
