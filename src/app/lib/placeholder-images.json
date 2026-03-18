@@ -18,6 +18,12 @@
       "description": "Student visitor avatar",
       "imageUrl": "https://picsum.photos/seed/student1/100/100",
       "imageHint": "student person"
+    },
+    {
+      "id": "neu-bg",
+      "description": "NEU Campus Background",
+      "imageUrl": "https://media.licdn.com/dms/image/v2/C510BAQHG3b-fD3W1sA/company-logo_200_200/company-logo_200_200/0/1630579844445?e=2147483647&v=beta&t=7p9J2K8_R9u9pS_4_J8-5S8_H_7_N_Y_H_S_8_S_Y_8_Y_8",
+      "imageHint": "university pattern"
     }
   ]
 }

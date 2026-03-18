@@ -12,9 +12,11 @@ import Link from "next/link";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 const ADMIN_WHITELIST = [
+  "jcesperanza@neu.edu.ph",
   "nhica.valderas@neu.edu.ph",
   "shawndavid.domingo@neu.edu.ph",
-  "jcesperanza@neu.edu.ph",
+  "edwardjassteen.degala@neu.edu.ph",
+  "edwardjasteen.degla@neu.edu.ph",
   "edwardjasteen.degala@neu.edu.ph"
 ];
 
@@ -49,7 +51,6 @@ export default function AdminLogin() {
 
       router.push("/admin");
     } catch (err: any) {
-      console.error("Google login error:", err);
       if (err.code !== 'auth/popup-closed-by-user') {
         setError("Failed to sign in with Google.");
       }
@@ -58,11 +59,11 @@ export default function AdminLogin() {
   };
 
   return (
-    <main className="min-h-screen bg-[#1a3a2a] flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md flex-1 flex flex-col justify-center">
+    <main className="min-h-screen relative flex flex-col items-center justify-center p-4 bg-[#1a3a2a]">
+      <div className="relative z-10 w-full max-w-md flex-1 flex flex-col justify-center">
         <Link 
           href="/" 
-          className="inline-flex items-center text-white/80 hover:text-white transition-all group font-bold uppercase text-[10px] tracking-widest mb-12 self-start"
+          className="inline-flex items-center text-white hover:text-white/80 transition-all group font-black uppercase text-[10px] tracking-widest mb-12 self-start"
         >
           <ChevronLeft className="h-4 w-4 mr-1 group-hover:-translate-x-1 transition-transform" />
           Back to Home
@@ -82,23 +83,23 @@ export default function AdminLogin() {
               </div>
             )}
             <div className="text-white space-y-1">
-              <h1 className="text-3xl font-bold tracking-tight uppercase">NEU Library</h1>
-              <h2 className="text-xl font-medium opacity-90 uppercase tracking-widest">ADMIN PORTAL</h2>
-              <p className="text-[10px] opacity-70 font-black uppercase tracking-widest">Authorized Access Only</p>
+              <h1 className="text-3xl font-black tracking-tight uppercase">NEU Library</h1>
+              <h2 className="text-xl font-bold uppercase tracking-widest">ADMIN PORTAL</h2>
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/90">Authorized Access Only</p>
             </div>
           </div>
 
-          <Card className="border-none shadow-2xl overflow-hidden bg-white/10 backdrop-blur-md">
+          <Card className="border border-white/10 shadow-2xl overflow-hidden bg-[#2d5a4c] rounded-2xl">
             <CardContent className="p-8 space-y-8">
               <div className="space-y-4">
-                <div className="text-white text-[10px] font-bold uppercase tracking-widest opacity-80 mb-6">
+                <div className="text-white text-xs font-black uppercase tracking-widest mb-6 leading-relaxed">
                   Sign in with your authorized NEU administrator account to access the dashboard.
                 </div>
                 
                 <Button 
                   onClick={handleGoogleLogin} 
                   disabled={loading}
-                  className="w-full h-14 bg-white text-[#1a3a2a] hover:bg-slate-100 font-bold flex items-center justify-center space-x-3 rounded-xl transition-all shadow-xl uppercase text-xs tracking-widest"
+                  className="w-full h-16 bg-white text-[#1a3a2a] hover:bg-slate-100 font-black flex items-center justify-center space-x-3 rounded-xl transition-all shadow-xl uppercase text-xs tracking-widest border-none"
                 >
                   {loading ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -110,13 +111,13 @@ export default function AdminLogin() {
               </div>
               
               {error && (
-                <div className="text-red-200 text-[10px] font-bold uppercase tracking-widest bg-red-900/50 p-3 rounded-lg border border-red-500/30">
+                <div className="text-red-100 text-[10px] font-black uppercase tracking-widest bg-red-900/60 p-3 rounded-lg border border-red-500/40">
                   {error}
                 </div>
               )}
 
               <div className="pt-4 border-t border-white/10">
-                <p className="text-[10px] text-white/50 leading-relaxed uppercase font-bold tracking-widest">
+                <p className="text-[10px] text-white leading-relaxed uppercase font-black tracking-widest">
                   Security Warning: Unauthorized access attempts are monitored and logged.
                 </p>
               </div>
@@ -125,8 +126,8 @@ export default function AdminLogin() {
         </div>
       </div>
 
-      <footer className="w-full text-center py-8 text-white/30 text-[10px] font-bold uppercase tracking-[0.2em]">
-        © 2026 NEU Library. All rights reserved
+      <footer className="relative z-10 w-full text-center py-8 text-white text-[10px] font-black uppercase tracking-[0.2em]">
+        © 2026 NEU Library. All rights reserved.
       </footer>
     </main>
   );

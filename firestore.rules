@@ -12,9 +12,11 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && (
+        request.auth.token.email == "jcesperanza@neu.edu.ph" ||
         request.auth.token.email == "nhica.valderas@neu.edu.ph" || 
         request.auth.token.email == "shawndavid.domingo@neu.edu.ph" ||
-        request.auth.token.email == "jcesperanza@neu.edu.ph" ||
+        request.auth.token.email == "edwardjassteen.degala@neu.edu.ph" ||
+        request.auth.token.email == "edwardjasteen.degla@neu.edu.ph" ||
         request.auth.token.email == "edwardjasteen.degala@neu.edu.ph"
       );
     }
