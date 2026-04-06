@@ -1,10 +1,6 @@
 {
-  "placeholderImages": [
-    {
-      "id": "neu-logo",
-      "description": "New Era University Logo",
-      "imageUrl": "https://neu.edu.ph/main/img/neu.png",
-      "imageHint": "university logo"
-    }
-  ]
+  "id": "neu-logo",
+  "description": "New Era University Logo",
+  "imageUrl": "https://upload.wikimedia.org/wikipedia/en/c/c6/New_Era_University.svg",
+  "imageHint": "university logo"
 }
